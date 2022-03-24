@@ -15,6 +15,9 @@ public class Player : MonoBehaviour
     public int coin;
     public int health;
     public int hasGrenade;
+    
+    //보는 위치로 총쏘기
+    public Camera followCamera;
 
     public int maxAmmo;
     public int maxCoin;
@@ -26,6 +29,8 @@ public class Player : MonoBehaviour
 
     bool wDown;
     bool jDown;
+    bool fDown; //공격
+    bool rDown; //장전
     bool iDown;
     bool sDown1;
     bool sDown2;
@@ -34,6 +39,11 @@ public class Player : MonoBehaviour
     bool isJump;
     bool isDodge;
     bool isSwap;
+    bool isReload;
+    bool isFireReady = true; //딜레이 후 준비완료
+
+    //벽 충돌 플래그
+    bool isBorder;
 
     Vector3 moveVec;
     Vector3 dodgeVec;
@@ -42,8 +52,9 @@ public class Player : MonoBehaviour
     Animator anim;
 
     GameObject nearObject;
-    GameObject equipWeapon;
+    Weapon equipWeapon;
     int equipWeaponIndex = -1; // 조건에서 0으로 뒀기 때문에
+    float fireDelay; //공격딜레이
 
     void Start()
     {
@@ -57,6 +68,8 @@ public class Player : MonoBehaviour
         Move();
         Turn();
         Jump();
+        Attack();
+        Reload();
         Dodge();
         Swap();
         Interation();
@@ -71,6 +84,8 @@ public class Player : MonoBehaviour
         //Shift는 누를 때만 작동되도록 GetButton() 함수 사용
         wDown = Input.GetButton("Walk");
         jDown = Input.GetButtonDown("Jump");
+        fDown = Input.GetButton("Fire1"); //마우스 왼쪽
+        rDown = Input.GetButtonDown("Reload"); //R
         iDown = Input.GetButtonDown("Interation");
         sDown1 = Input.GetButtonDown("Swap1");
         sDown2 = Input.GetButtonDown("Swap2");
@@ -79,19 +94,19 @@ public class Player : MonoBehaviour
 
     void Move()
     {
-        //normalized: 방향 값이 1로 보정된 벡터(가로 세로가 1이어도 대각서은 더 긴 루트2이기 때문에
         moveVec = new Vector3(hAxis, 0, vAxis).normalized; //움직임 벡터
 
         //회피를 할 때 회피를 하고 있는 방향으로
         if (isDodge)
             moveVec = dodgeVec;
 
-        if (isSwap)
+        if (isSwap || isReload || !isFireReady) //공격 중에는 이동 불가 되도록 설정, 장전 시
             moveVec = Vector3.zero;
 
         //이동 * 속도, transform은 deltatime까지 넣기
         //삼항 연산자(bool 형태 조건 ? true일 때 값 : false 일 때 값, if문 대신 사용
-        transform.position += moveVec * speed * (wDown ? 0.3f : 1f) * Time.deltaTime;
+        if (!isBorder) //이동 제한
+            transform.position += moveVec * speed * (wDown ? 0.3f : 1f) * Time.deltaTime;
 
         anim.SetBool("isRun", moveVec != Vector3.zero); //기본을 달리기
         anim.SetBool("isWalk", wDown);
@@ -99,8 +114,22 @@ public class Player : MonoBehaviour
 
     void Turn()
     {
-        //LookAt(): 지정된 벡터를 향해서 회전시켜주는 함수
+        //#1. 키보드에 의한 회전
         transform.LookAt(transform.position + moveVec); //나아가는 방향으로 회전한다
+
+        //#2. 마우스에 의한 회전
+        if(fDown) //마우스 클릭 시에만
+        {
+            Ray ray = followCamera.ScreenPointToRay(Input.mousePosition);
+            //ray가 닿은 floor 위치
+            RaycastHit rayHit;
+            if (Physics.Raycast(ray, out rayHit, 100))
+            {
+                Vector3 nextVec = rayHit.point - transform.position;
+                nextVec.y = 0; //높이 무시
+                transform.LookAt(transform.position + nextVec);
+            }
+        }
     }
 
     void Jump()
@@ -114,6 +143,55 @@ public class Player : MonoBehaviour
             anim.SetTrigger("doJump");
             isJump = true;
         }
+    }
+
+    //공격
+    void Attack()
+    {
+        if (equipWeapon == null) //무기가 있을때만 실행되도록 현재장비 체크
+            return;
+
+        //공격딜레이에 시간을 더해주고 공격가능 여부를 확인
+        fireDelay += Time.deltaTime;
+        isFireReady = equipWeapon.rate < fireDelay; //공속보다 높게 설정해서 딜레이
+
+        if(fDown && isFireReady && !isDodge && !isSwap) //회피, 교체할땐 안함
+        {
+            equipWeapon.Use(); //무기에 있는 함수 실행
+            //삼항연산자를 사용해서 근접이면 스윙, 원거리면 쏘기
+            anim.SetTrigger(equipWeapon.type == Weapon.Type.Melee ? "doSwing" : "doShot");
+            fireDelay = 0; //다음 공격까지 기다리도록 딜레이 0
+        }
+    }
+
+    //재장전
+    void Reload()
+    {
+        if (equipWeapon == null) //무기 없을때
+            return;
+
+        if (equipWeapon.type == Weapon.Type.Melee) //근접
+            return;
+
+        if (ammo == 0) //총알 없음
+            return;
+
+        if(rDown && !isJump && !isDodge && !isSwap && isFireReady)
+        {
+            anim.SetTrigger("doReload");
+            isReload = true;
+
+            Invoke("ReloadOut", 3f); //장전 3초
+        }
+    }
+
+    void ReloadOut()
+    {
+        //플레이어가 소지한 탄을 고려해서 계산하기
+        int reAmmo = ammo < equipWeapon.maxAmmo ? ammo : equipWeapon.maxAmmo;
+        equipWeapon.curAmmo = equipWeapon.maxAmmo; //무기는 탄이 들어가고
+        ammo -= reAmmo; //들어간 개수만큼 소지 탄은 사라짐
+        isReload = false;
     }
 
     //회피
@@ -158,11 +236,11 @@ public class Player : MonoBehaviour
         {
             //빈손일 경우
             if(equipWeapon != null)
-                equipWeapon.SetActive(false);
+                equipWeapon.gameObject.SetActive(false);
 
             equipWeaponIndex = weaponIndex;
-            equipWeapon = weapons[weaponIndex];
-            equipWeapon.SetActive(true);
+            equipWeapon = weapons[weaponIndex].GetComponent<Weapon>();
+            equipWeapon.gameObject.SetActive(true);
 
             anim.SetTrigger("doSwap");
 
@@ -193,14 +271,37 @@ public class Player : MonoBehaviour
         }
     }
 
+    //스스로 도는 현상 고치기
+    void FreezeRotation()
+    {
+        rigid.angularVelocity = Vector3.zero;
+    }
+
+    //벽 통과 현상
+    void StopToWall()
+    {
+        Debug.DrawRay(transform.position, transform.forward * 5, Color.green);
+        //Raycast: Ray를 쏘아 닿는 오브젝트를 감지하는 함수
+        //(위치, 방향, 길이, 레이어마스크)
+        isBorder = Physics.Raycast(transform.position, transform.forward, 5, LayerMask.GetMask("Wall"));
+    }
+
+    void FixedUpdate()
+    {
+        FreezeRotation();
+        StopToWall();
+    }
+
     //착지 구현
     void OnCollisionEnter(Collision collision)
     {
         //바닥에 부딪히면 점프 가능
         if(collision.gameObject.tag == "Floor")
         {
+            Debug.Log("착지 전 isJump: " + isJump);
             anim.SetBool("isJump", false);
             isJump = false;
+            Debug.Log("착지 후 isJump: " + isJump);
         }
     }
 
@@ -229,11 +330,10 @@ public class Player : MonoBehaviour
                         health = maxHealth;
                     break;
                 case Item.Type.Grenade:
+                    grenades[hasGrenade].SetActive(true); //수류탄 개수대로 공전체가 활성화 되도록 구현
                     hasGrenade += item.value;
-                    if (hasGrenade == maxHasGrenade)
-                        return;
-                    grenades[hasGrenade].SetActive(true);
-                    hasGrenade += item.value;
+                    if (hasGrenade > maxHasGrenade)
+                        hasGrenade = maxHasGrenade;
                     break;
             }
             Destroy(other.gameObject);
