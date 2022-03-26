@@ -298,10 +298,8 @@ public class Player : MonoBehaviour
         //바닥에 부딪히면 점프 가능
         if(collision.gameObject.tag == "Floor")
         {
-            Debug.Log("착지 전 isJump: " + isJump);
             anim.SetBool("isJump", false);
             isJump = false;
-            Debug.Log("착지 후 isJump: " + isJump);
         }
     }
 
@@ -330,10 +328,10 @@ public class Player : MonoBehaviour
                         health = maxHealth;
                     break;
                 case Item.Type.Grenade:
+                    if (hasGrenade == maxHasGrenade)
+                        return;
                     grenades[hasGrenade].SetActive(true); //수류탄 개수대로 공전체가 활성화 되도록 구현
                     hasGrenade += item.value;
-                    if (hasGrenade > maxHasGrenade)
-                        hasGrenade = maxHasGrenade;
                     break;
             }
             Destroy(other.gameObject);
