@@ -15,6 +15,9 @@ public class Player : MonoBehaviour
     public int coin;
     public int health;
     public int hasGrenade;
+
+    //수류탄
+    public GameObject grenadeObj;
     
     //보는 위치로 총쏘기
     public Camera followCamera;
@@ -30,6 +33,7 @@ public class Player : MonoBehaviour
     bool wDown;
     bool jDown;
     bool fDown; //공격
+    bool gDown; //수류탄 공격
     bool rDown; //장전
     bool iDown;
     bool sDown1;
@@ -41,25 +45,26 @@ public class Player : MonoBehaviour
     bool isSwap;
     bool isReload;
     bool isFireReady = true; //딜레이 후 준비완료
-
-    //벽 충돌 플래그
-    bool isBorder;
+    bool isBorder; //벽 충돌 플래그
+    bool isDamage; //무적타임
 
     Vector3 moveVec;
     Vector3 dodgeVec;
 
     Rigidbody rigid;
     Animator anim;
+    MeshRenderer[] meshs;
 
     GameObject nearObject;
     Weapon equipWeapon;
     int equipWeaponIndex = -1; // 조건에서 0으로 뒀기 때문에
     float fireDelay; //공격딜레이
 
-    void Start()
+    void Awake()
     {
         rigid = GetComponent<Rigidbody>();
         anim = GetComponentInChildren<Animator>(); //자식오브젝트의 컴포넌트를 가져옴
+        meshs = GetComponentsInChildren<MeshRenderer>();
     }
 
     void Update()
@@ -68,6 +73,7 @@ public class Player : MonoBehaviour
         Move();
         Turn();
         Jump();
+        Grenade();
         Attack();
         Reload();
         Dodge();
@@ -85,6 +91,7 @@ public class Player : MonoBehaviour
         wDown = Input.GetButton("Walk");
         jDown = Input.GetButtonDown("Jump");
         fDown = Input.GetButton("Fire1"); //마우스 왼쪽
+        gDown = Input.GetButtonDown("Fire2"); //마우스 오른쪽
         rDown = Input.GetButtonDown("Reload"); //R
         iDown = Input.GetButtonDown("Interation");
         sDown1 = Input.GetButtonDown("Swap1");
@@ -142,6 +149,34 @@ public class Player : MonoBehaviour
             anim.SetBool("isJump", true);
             anim.SetTrigger("doJump");
             isJump = true;
+        }
+    }
+
+    //수류탄
+    void Grenade()
+    {
+        //수류탄 쓰기 이전에 제한 조건들
+        if (hasGrenade == 0)
+            return;
+
+        if(gDown && !isReload && !isSwap)
+        {
+            Ray ray = followCamera.ScreenPointToRay(Input.mousePosition);
+            RaycastHit rayHit;
+            if (Physics.Raycast(ray, out rayHit, 100))
+            {
+                Vector3 nextVec = rayHit.point - transform.position;
+                nextVec.y = 10;
+
+                GameObject instantGrenade = Instantiate(grenadeObj, transform.position, transform.rotation);
+                //생성된 수류탄의 리지드바디를 활용하여 던지는 로직 구현
+                Rigidbody rigidGrenade = instantGrenade.GetComponent<Rigidbody>();
+                rigidGrenade.AddForce(nextVec, ForceMode.Impulse);
+                rigidGrenade.AddTorque(Vector3.back * 10, ForceMode.Impulse); //회전
+
+                hasGrenade--;
+                grenades[hasGrenade].SetActive(false);
+            }
         }
     }
 
@@ -280,7 +315,7 @@ public class Player : MonoBehaviour
     //벽 통과 현상
     void StopToWall()
     {
-        Debug.DrawRay(transform.position, transform.forward * 5, Color.green);
+        //Debug.DrawRay(transform.position, transform.forward * 5, Color.green);
         //Raycast: Ray를 쏘아 닿는 오브젝트를 감지하는 함수
         //(위치, 방향, 길이, 레이어마스크)
         isBorder = Physics.Raycast(transform.position, transform.forward, 5, LayerMask.GetMask("Wall"));
@@ -336,6 +371,44 @@ public class Player : MonoBehaviour
             }
             Destroy(other.gameObject);
         }
+        else if (other.tag == "EnemyBullet")
+        {
+            if (!isDamage)
+            {
+                Bullet enemyBullet = other.GetComponent<Bullet>();
+                health -= enemyBullet.damage; //체력깎음
+
+                bool isBossAtk = other.name == "Boss Melee Area";
+                StartCoroutine(OnDamege(isBossAtk)); //리액션 코루틴
+            }
+
+            //리지드바디 유무
+            if (other.GetComponent<Rigidbody>() != null)
+                Destroy(other.gameObject);
+        }
+    }
+    
+    IEnumerator OnDamege(bool isBossAtk)
+    {
+        isDamage = true;
+        foreach(MeshRenderer mesh in meshs)
+        {
+            mesh.material.color = Color.yellow;
+        }
+
+        if (isBossAtk)
+            rigid.AddForce(transform.forward * -25, ForceMode.Impulse);
+
+        yield return new WaitForSeconds(1f); //무적 타임 설정
+
+        isDamage = false; //무적해제
+        foreach (MeshRenderer mesh in meshs)
+        {
+            mesh.material.color = Color.white;
+        }
+
+        if (isBossAtk)
+            rigid.velocity = Vector3.zero;
     }
 
     //오브젝트 감지
