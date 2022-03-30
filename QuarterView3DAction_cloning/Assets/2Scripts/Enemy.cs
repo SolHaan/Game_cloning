@@ -10,10 +10,13 @@ public class Enemy : MonoBehaviour
     public Type enemyType; //타입을 집어넣을 곳
     public int maxHealth; //체력
     public int curHealth; //현재체력
+    public int score; //점수 동전
+    public GameManager manager;
     public Transform target; //목표물
     //공격범위
     public BoxCollider meleeArea; //콜라이더를 담을 변수
     public GameObject bullet;
+    public GameObject[] coins; //점수 동전
     public bool isChase; //추적 결정
     public bool isAttack; //공격 여부
     public bool isDead;
@@ -158,6 +161,7 @@ public class Enemy : MonoBehaviour
             //충돌
             Weapon weapon = other.GetComponent<Weapon>();
             curHealth -= weapon.damage;
+            //curHealth -= weapon.damage;
             //넉백, 현재 위치에 피격 위치 빼서 반작용 방향 구하기
             Vector3 reactVec = transform.position - other.transform.position;
             StartCoroutine(OnDamage(reactVec, false));
@@ -191,21 +195,47 @@ public class Enemy : MonoBehaviour
 
         yield return new WaitForSeconds(0.1f);
 
-        if(curHealth > 0) //아직 죽기전
+        if (curHealth > 0 && !isDead) //아직 죽기전
         {
+            Debug.Log("죽기 전 " + manager.enemyCntA);
+            yield return new WaitForSeconds(0.2f);
             foreach (MeshRenderer mesh in meshs)
                 mesh.material.color = Color.white;
         }
         else //죽음
         {
+            Debug.Log("죽음 " + manager.enemyCntA);
+            isDead = true;
             foreach (MeshRenderer mesh in meshs)
                 mesh.material.color = Color.gray;
 
             gameObject.layer = 14; //레이어 번호 그대로 써도 됨
-            isDead = true;
+            //isDead = true;
             isChase = false; //추적 중지
             nav.enabled = false;
             anim.SetTrigger("doDie"); //애니메이션
+
+            //점수 부여
+            Player player = target.GetComponent<Player>();
+            player.score += score;
+            int ranCoin = Random.Range(0, 3);
+            Instantiate(coins[ranCoin], transform.position, Quaternion.identity);
+
+            switch (enemyType)
+            {
+                case Type.A:
+                    manager.enemyCntA--;
+                    break;
+                case Type.B:
+                    manager.enemyCntB--;
+                    break;
+                case Type.C:
+                    manager.enemyCntC--;
+                    break;
+                case Type.D:
+                    manager.enemyCntD--;
+                    break;
+            }
 
             if(isGrenade)
             {
@@ -223,8 +253,7 @@ public class Enemy : MonoBehaviour
                 rigid.AddForce(reactVec * 5, ForceMode.Impulse); //넉백 힘 5
             }
 
-            if(enemyType != Type.D)
-                Destroy(gameObject, 4); //사라짐
+            Destroy(gameObject, 4); //사라짐
         }
     }
 }

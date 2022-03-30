@@ -23,6 +23,9 @@ public class Player : MonoBehaviour
     //보는 위치로 총쏘기
     public Camera followCamera;
 
+    public GameManager manger;
+    public AudioSource jumpSound;
+
     public int maxAmmo;
     public int maxCoin;
     public int maxHealth;
@@ -49,6 +52,7 @@ public class Player : MonoBehaviour
     bool isBorder; //벽 충돌 플래그
     bool isDamage; //무적타임
     bool isShop; //쇼핑중
+    bool isDead;
 
     Vector3 moveVec;
     Vector3 dodgeVec;
@@ -68,7 +72,7 @@ public class Player : MonoBehaviour
         anim = GetComponentInChildren<Animator>(); //자식오브젝트의 컴포넌트를 가져옴
         meshs = GetComponentsInChildren<MeshRenderer>();
 
-        Debug.Log(PlayerPrefs.GetInt("MaxScore"));
+        //Debug.Log(PlayerPrefs.GetInt("MaxScore"));
         //PlayerPrefs.SetInt("MaxScore", 112500);
     }
 
@@ -112,7 +116,7 @@ public class Player : MonoBehaviour
         if (isDodge)
             moveVec = dodgeVec;
 
-        if (isSwap || isReload || !isFireReady) //공격 중에는 이동 불가 되도록 설정, 장전 시
+        if (isSwap || isReload || !isFireReady || isDead) //공격 중에는 이동 불가 되도록 설정, 장전 시
             moveVec = Vector3.zero;
 
         //이동 * 속도, transform은 deltatime까지 넣기
@@ -130,7 +134,7 @@ public class Player : MonoBehaviour
         transform.LookAt(transform.position + moveVec); //나아가는 방향으로 회전한다
 
         //#2. 마우스에 의한 회전
-        if(fDown) //마우스 클릭 시에만
+        if(fDown && !isDead) //마우스 클릭 시에만
         {
             Ray ray = followCamera.ScreenPointToRay(Input.mousePosition);
             //ray가 닿은 floor 위치
@@ -146,7 +150,7 @@ public class Player : MonoBehaviour
 
     void Jump()
     {
-        if (jDown && moveVec == Vector3.zero && !isJump && !isDodge && !isSwap)
+        if (jDown && moveVec == Vector3.zero && !isJump && !isDodge && !isSwap && !isDead)
         {
             //AddForce() 함수로 물리적인 힘을 가하기
             //ForceMode는 4가지 모드가 있음, Impulse: 즉발적임
@@ -154,6 +158,8 @@ public class Player : MonoBehaviour
             anim.SetBool("isJump", true);
             anim.SetTrigger("doJump");
             isJump = true;
+
+            jumpSound.Play();
         }
     }
 
@@ -164,7 +170,7 @@ public class Player : MonoBehaviour
         if (hasGrenade == 0)
             return;
 
-        if(gDown && !isReload && !isSwap)
+        if(gDown && !isReload && !isSwap && !isDead)
         {
             Ray ray = followCamera.ScreenPointToRay(Input.mousePosition);
             RaycastHit rayHit;
@@ -195,7 +201,7 @@ public class Player : MonoBehaviour
         fireDelay += Time.deltaTime;
         isFireReady = equipWeapon.rate < fireDelay; //공속보다 높게 설정해서 딜레이
 
-        if(fDown && isFireReady && !isDodge && !isSwap && !isShop) //회피, 교체할땐 안함
+        if(fDown && isFireReady && !isDodge && !isSwap && !isShop && !isDead) //회피, 교체할땐 안함
         {
             equipWeapon.Use(); //무기에 있는 함수 실행
             //삼항연산자를 사용해서 근접이면 스윙, 원거리면 쏘기
@@ -216,12 +222,12 @@ public class Player : MonoBehaviour
         if (ammo == 0) //총알 없음
             return;
 
-        if(rDown && !isJump && !isDodge && !isSwap && isFireReady && !isShop)
+        if(rDown && !isJump && !isDodge && !isSwap && isFireReady && !isShop && !isDead)
         {
             anim.SetTrigger("doReload");
             isReload = true;
 
-            Invoke("ReloadOut", 3f); //장전 3초
+            Invoke("ReloadOut", 2f); //장전 3초
         }
     }
 
@@ -239,7 +245,7 @@ public class Player : MonoBehaviour
     {
         //움직임을 조건으로 추가해서 점프와 회피로 나누기
         //액션 도중 다른 액션이 실행되지 않도록 조건 추가(!isDodge)
-        if (jDown && moveVec != Vector3.zero && !isJump && !isDodge && !isSwap && !isShop)
+        if (jDown && moveVec != Vector3.zero && !isJump && !isDodge && !isSwap && !isShop && !isDead)
         {
             dodgeVec = moveVec;
             speed *= 2; //회피는 이동속도만 2배로 상승하도록
@@ -272,7 +278,7 @@ public class Player : MonoBehaviour
         if (sDown2) weaponIndex = 1;
         if (sDown3) weaponIndex = 2;
 
-        if((sDown1 || sDown2 || sDown3) && !isJump && !isDodge && !isShop)
+        if((sDown1 || sDown2 || sDown3) && !isJump && !isDodge && !isShop && !isDead)
         {
             //빈손일 경우
             if(equipWeapon != null)
@@ -298,7 +304,7 @@ public class Player : MonoBehaviour
     //무기 입수
     void Interation()
     {
-        if (iDown && nearObject != null && !isJump && !isDodge && !isShop)
+        if (iDown && nearObject != null && !isJump && !isDodge && !isShop && !isDead)
         {
             if (nearObject.tag == "Weapon")
             {
@@ -410,6 +416,9 @@ public class Player : MonoBehaviour
         if (isBossAtk)
             rigid.AddForce(transform.forward * -25, ForceMode.Impulse);
 
+        if (health <= 0 && !isDead)
+            OnDie();
+
         yield return new WaitForSeconds(1f); //무적 타임 설정
 
         isDamage = false; //무적해제
@@ -420,6 +429,13 @@ public class Player : MonoBehaviour
 
         if (isBossAtk)
             rigid.velocity = Vector3.zero;
+    }
+
+    void OnDie()
+    {
+        anim.SetTrigger("doDie");
+        isDead = true;
+        manger.GameOver();
     }
 
     //오브젝트 감지

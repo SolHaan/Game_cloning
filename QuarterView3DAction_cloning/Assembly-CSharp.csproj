@@ -64,10 +64,11 @@
     <Compile Include="Assets\2Scripts\Grenade.cs" />
     <Compile Include="Assets\2Scripts\Follow.cs" />
     <Compile Include="Assets\2Scripts\BossMissile.cs" />
+    <Compile Include="Assets\2Scripts\GameManager.cs" />
     <Compile Include="Assets\2Scripts\Weapon.cs" />
     <Compile Include="Assets\2Scripts\Orbit.cs" />
     <Compile Include="Assets\2Scripts\Missile.cs" />
-    <Compile Include="Assets\2Scripts\GameManager.cs" />
+    <Compile Include="Assets\2Scripts\StartZone.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">

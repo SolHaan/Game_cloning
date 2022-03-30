@@ -32,5 +32,15 @@ public class Item : MonoBehaviour
             rigid.isKinematic = true;
             sphereCollider.enabled = false;
         }
+
+        if (collision.gameObject.tag == "Player")
+        {
+            if(type == Type.Coin)
+            {
+                Player player = collision.gameObject.GetComponent<Player>();
+                player.coin += value;
+                Destroy(gameObject);
+            }
+        }
     }
 }
